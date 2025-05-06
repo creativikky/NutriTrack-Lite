@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dashboard - NutriTrack</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="top-bar">
+    <button onclick="logout()">Logout</button>
+  </div>
+  <div class="dashboard">
+    <div class="column middle">
+      <h2>Today's Progress</h2>
+      <p>Calories (out of 2000 kcal)</p>
+      <progress id="calProgress" max="2000" value="0"></progress>
+      <p id="calLabel">0 / 2000 kcal</p>
+
+      <p>Protein (out of 65g)</p>
+      <progress id="proteinProgress" max="65" value="0"></progress>
+      <p id="proteinLabel">0 / 65 g</p>
+    </div>
+  </div>
+  <script type="module" src="firebase-config.js"></script>
+  <script type="module" src="script.js"></script>
+</body>
+</html>

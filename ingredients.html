@@ -128,6 +128,39 @@
     await deleteDoc(doc(db, "ingredients", id));
     loadIngredients();
   }
+
+  window.editIngredient = function(id, btn) {
+    const row = btn.closest("tr");
+    const cells = row.querySelectorAll("td");
+    const values = Array.from(cells).slice(0, 5).map(td => td.textContent);
+
+    cells[0].innerHTML = `<input value="\${values[0]}" />`;
+    cells[1].innerHTML = `<input value="\${values[1]}" />`;
+    cells[2].innerHTML = `<input value="\${values[2]}" />`;
+    cells[3].innerHTML = `<input type="number" step="0.01" value="\${values[3]}" />`;
+    cells[4].innerHTML = `<input type="number" step="0.01" value="\${values[4]}" />`;
+    cells[5].innerHTML = `
+      <button class='btn' onclick='saveEdit("\${id}", this)'>Save</button>
+      <button class='btn btn-delete' onclick='loadIngredients()'>Cancel</button>
+    `;
+  }
+
+  window.saveEdit = async function(id, btn) {
+    const row = btn.closest("tr");
+    const inputs = row.querySelectorAll("input");
+
+    const updated = {
+      item: inputs[0].value.trim(),
+      qty: inputs[1].value.trim(),
+      unit: inputs[2].value.trim(),
+      calories: inputs[3].value.trim(),
+      protein: inputs[4].value.trim()
+    };
+
+    await updateDoc(doc(db, "ingredients", id), updated);
+    await loadIngredients();
+  }
+
 </script>
 
 </body>

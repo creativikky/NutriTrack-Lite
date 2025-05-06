@@ -536,17 +536,7 @@ function renderTable(ingredients) {
   </dialog>
 
   <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyAsSdKm43H4dyjKGHtTN6ahwH6RwVcSdYo",
-      authDomain: "nutritrack-12b26.firebaseapp.com",
-      projectId: "nutritrack-12b26",
-      storageBucket: "nutritrack-12b26.appspot.com",
-      messagingSenderId: "1034235028376",
-      appId: "1:1034235028376:web:ce52c8ca6d1e6a993141ed"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
+    
 
     let currentUID = null;
 
@@ -773,6 +763,87 @@ function renderTable(ingredients) {
 }
 
 </script>
+
+
+  <script type="module">
+    import { auth } from './firebase-config.js';
+    import { getFirestore, collection, query, where, getDocs, addDoc, deleteDoc, doc, onAuthStateChanged } 
+    from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+    import { app } from './firebase-config.js';
+    const db = getFirestore(app);
+
+    let currentUID = null;
+
+    onAuthStateChanged(auth, user => {
+      if (!user) return window.location.href = "index.html";
+      currentUID = user.uid;
+      loadIngredients();
+    });
+
+    async function loadIngredients() {
+      const q = query(collection(db, "ingredients"), where("uid", "==", currentUID));
+      const snapshot = await getDocs(q);
+      renderTable(snapshot.docs);
+    }
+
+    window.saveIngredient = async function(e) {
+      e.preventDefault();
+      const item = document.getElementById("itemInput").value.trim();
+      const qty = document.getElementById("qtyInput").value.trim();
+      const unit = document.getElementById("unitInput").value.trim();
+      const calories = document.getElementById("caloriesInput").value.trim();
+      const protein = document.getElementById("proteinInput").value.trim();
+
+      if (!item || !qty || !unit || !calories || !protein) return;
+
+      await addDoc(collection(db, "ingredients"), {
+        uid: currentUID,
+        item, qty, unit, calories, protein
+      });
+
+      document.getElementById("ingredientDialog").close();
+      loadIngredients();
+    }
+
+    window.deleteIngredient = async function(id) {
+      if (confirm("Delete this ingredient?")) {
+        await deleteDoc(doc(db, "ingredients", id));
+        loadIngredients();
+      }
+    }
+
+    function renderTable(ingredients) {
+      const tbody = document.getElementById("ingredientTable");
+      tbody.innerHTML = "";
+      if (ingredients.length === 0) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 6;
+        td.textContent = "No ingredients in lookup table.";
+        td.style.fontStyle = "italic";
+        td.style.color = "#666";
+        td.style.textAlign = "center";
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        return;
+      }
+
+      ingredients.forEach(doc => {
+        const ing = doc.data();
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${ing.item}</td>
+          <td>${ing.qty}</td>
+          <td>${ing.unit}</td>
+          <td>${ing.calories}</td>
+          <td>${ing.protein}</td>
+          <td><button class="btn btn-delete" onclick="deleteIngredient('${doc.id}')">Delete</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+  </script>
 
 </body>
 </html>

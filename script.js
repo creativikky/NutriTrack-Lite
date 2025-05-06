@@ -1,5 +1,14 @@
 import { auth } from './firebase-config.js';
-import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut,
+  sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithPopup
+} from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+
 
 const loginPage = location.pathname.endsWith("index.html") || location.pathname === "/";
 const dashboardPage = location.pathname.endsWith("dashboard.html");

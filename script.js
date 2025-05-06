@@ -1,6 +1,7 @@
 
-import { auth } from './firebase-config.js';
+import { app } from './firebase-config.js';
 import {
+  getAuth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
@@ -9,6 +10,8 @@ import {
   GoogleAuthProvider,
   signInWithPopup
 } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+
+const auth = getAuth(app);
 
 window.login = async function () {
   const email = document.getElementById('email').value;

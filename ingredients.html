@@ -2,848 +2,133 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Ingredient Lookup Table</title>
+  <title>Ingredients</title>
+  <link rel="stylesheet" href="style.css">
   <style>
-    body { font-family: sans-serif; background: #f3fcf6; padding: 2rem; }
-    h2 { margin-bottom: 1rem; }
+    body { font-family: sans-serif; padding: 2rem; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; background: white; border-radius: 10px; overflow: hidden; }
     th, td { padding: 10px; border: 1px solid #ddd; text-align: center; }
     th { background-color: #eef; }
     .btn { padding: 5px 10px; margin: 5px; border-radius: 4px; cursor: pointer; }
     .btn-add { background-color: #007bff; color: white; }
     .btn-delete { background-color: #dc3545; color: white; }
-    dialog input { display: block; margin-bottom: 8px; width: 100%; padding: 4px; }
-    dialog form { display: flex; flex-direction: column; width: 300px; }
   </style>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js">
-function handleCSVUpload() {
-  const fileInput = document.getElementById('csvInput');
-  const file = fileInput.files[0];
-  if (!file) return alert("Please select a CSV file.");
-
-  const reader = new FileReader();
-  reader.onload = function (e) {
-    const text = e.target.result;
-    const lines = text.trim().split('\n');
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-
-    const required = ['item', 'qty', 'unit', 'calories', 'protein'];
-    if (!required.every(h => headers.includes(h))) {
-      return alert("CSV must include: item, qty, unit, calories, protein");
-    }
-
-    const headerIndex = Object.fromEntries(headers.map((h, i) => [h, i]));
-
-    const toAdd = lines.slice(1).map(line => {
-      const cols = line.split(',');
-      return {
-        uid: currentUID,
-        item: cols[headerIndex['item']].trim(),
-        qty: cols[headerIndex['qty']].trim(),
-        unit: cols[headerIndex['unit']].trim(),
-        calories: cols[headerIndex['calories']].trim(),
-        protein: cols[headerIndex['protein']].trim(),
-      };
-    });
-
-    const batch = db.batch();
-    const ref = db.collection("ingredients");
-    toAdd.forEach(entry => {
-      const docRef = ref.doc();
-      batch.set(docRef, entry);
-    });
-
-    batch.commit().then(() => {
-      alert("CSV uploaded successfully.");
-      loadIngredients();
-    }).catch(err => {
-      alert("Upload failed: " + err.message);
-    });
-  };
-  reader.readAsText(file);
-}
-
-
-function exportToCSV() {
-  db.collection("ingredients").where("uid", "==", currentUID).get().then(snapshot => {
-    if (snapshot.empty) {
-      alert("No ingredients to export.");
-      return;
-    }
-    const rows = [["item", "qty", "unit", "calories", "protein"]];
-    snapshot.forEach(doc => {
-      const d = doc.data();
-      rows.push([d.item, d.qty, d.unit, d.calories, d.protein]);
-    });
-    const csvContent = rows.map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "ingredients.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  });
-}
-
-
-function enableEdit(btn) {
-  const row = btn.closest("tr");
-  row.querySelectorAll(".view").forEach(el => el.style.display = "none");
-  row.querySelectorAll(".edit").forEach(el => el.style.display = "inline-block");
-  row.querySelector(".editBtn").style.display = "none";
-  row.querySelector(".saveBtn").style.display = "inline-block";
-  row.querySelector(".cancelBtn").style.display = "inline-block";
-}
-
-function cancelEdit(btn) {
-  const row = btn.closest("tr");
-  row.querySelectorAll(".view").forEach(el => el.style.display = "inline-block");
-  row.querySelectorAll(".edit").forEach(el => el.style.display = "none");
-  row.querySelector(".editBtn").style.display = "inline-block";
-  row.querySelector(".saveBtn").style.display = "none";
-  row.querySelector(".cancelBtn").style.display = "none";
-}
-
-function saveEdit(btn, id) {
-  const row = btn.closest("tr");
-  const inputs = row.querySelectorAll(".edit");
-  const updated = {
-    item: inputs[0].value.trim(),
-    qty: inputs[1].value.trim(),
-    unit: inputs[2].value.trim(),
-    calories: inputs[3].value.trim(),
-    protein: inputs[4].value.trim(),
-    uid: currentUID
-  };
-  db.collection("ingredients").doc(id).update(updated).then(loadIngredients);
-}
-
-
-function renderTable(ingredients) {
-  const tbody = document.getElementById("ingredientTable");
-  tbody.innerHTML = "";
-  if (ingredients.length === 0) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 6;
-    td.textContent = "No ingredients in lookup table.";
-    td.style.fontStyle = "italic";
-    td.style.color = "#666";
-    td.style.textAlign = "center";
-    tr.appendChild(td);
-    tbody.appendChild(tr);
-    return;
-  }
-
-  ingredients.forEach(doc => {
-    const ing = doc.data();
-    const id = doc.id;
-    const tr = document.createElement("tr");
-
-    ['item','qty','unit','calories','protein'].forEach(key => {
-      const td = document.createElement("td");
-      const span = document.createElement("span");
-      span.className = "view";
-      span.textContent = ing[key];
-      const input = document.createElement("input");
-      input.className = "edit";
-      input.value = ing[key];
-      input.style.display = "none";
-      if (key === "qty" || key === "calories" || key === "protein") input.type = "number";
-      else input.type = "text";
-      td.appendChild(span);
-      td.appendChild(input);
-      tr.appendChild(td);
-    });
-
-    const actionTd = document.createElement("td");
-    actionTd.innerHTML = `
-      <button class="btn editBtn" onclick="enableEdit(this)">Edit</button>
-      <button class="btn btn-add saveBtn" style="display:none;" onclick="saveEdit(this, '${id}')">Save</button>
-      <button class="btn btn-delete cancelBtn" style="display:none;" onclick="cancelEdit(this)">Cancel</button>
-      <button class="btn btn-delete" onclick="deleteIngredient('${id}')">Delete</button>
-    `;
-    tr.appendChild(actionTd);
-    tbody.appendChild(tr);
-  });
-}
-
-</script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js">
-function handleCSVUpload() {
-  const fileInput = document.getElementById('csvInput');
-  const file = fileInput.files[0];
-  if (!file) return alert("Please select a CSV file.");
-
-  const reader = new FileReader();
-  reader.onload = function (e) {
-    const text = e.target.result;
-    const lines = text.trim().split('\n');
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-
-    const required = ['item', 'qty', 'unit', 'calories', 'protein'];
-    if (!required.every(h => headers.includes(h))) {
-      return alert("CSV must include: item, qty, unit, calories, protein");
-    }
-
-    const headerIndex = Object.fromEntries(headers.map((h, i) => [h, i]));
-
-    const toAdd = lines.slice(1).map(line => {
-      const cols = line.split(',');
-      return {
-        uid: currentUID,
-        item: cols[headerIndex['item']].trim(),
-        qty: cols[headerIndex['qty']].trim(),
-        unit: cols[headerIndex['unit']].trim(),
-        calories: cols[headerIndex['calories']].trim(),
-        protein: cols[headerIndex['protein']].trim(),
-      };
-    });
-
-    const batch = db.batch();
-    const ref = db.collection("ingredients");
-    toAdd.forEach(entry => {
-      const docRef = ref.doc();
-      batch.set(docRef, entry);
-    });
-
-    batch.commit().then(() => {
-      alert("CSV uploaded successfully.");
-      loadIngredients();
-    }).catch(err => {
-      alert("Upload failed: " + err.message);
-    });
-  };
-  reader.readAsText(file);
-}
-
-
-function exportToCSV() {
-  db.collection("ingredients").where("uid", "==", currentUID).get().then(snapshot => {
-    if (snapshot.empty) {
-      alert("No ingredients to export.");
-      return;
-    }
-    const rows = [["item", "qty", "unit", "calories", "protein"]];
-    snapshot.forEach(doc => {
-      const d = doc.data();
-      rows.push([d.item, d.qty, d.unit, d.calories, d.protein]);
-    });
-    const csvContent = rows.map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "ingredients.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  });
-}
-
-
-function enableEdit(btn) {
-  const row = btn.closest("tr");
-  row.querySelectorAll(".view").forEach(el => el.style.display = "none");
-  row.querySelectorAll(".edit").forEach(el => el.style.display = "inline-block");
-  row.querySelector(".editBtn").style.display = "none";
-  row.querySelector(".saveBtn").style.display = "inline-block";
-  row.querySelector(".cancelBtn").style.display = "inline-block";
-}
-
-function cancelEdit(btn) {
-  const row = btn.closest("tr");
-  row.querySelectorAll(".view").forEach(el => el.style.display = "inline-block");
-  row.querySelectorAll(".edit").forEach(el => el.style.display = "none");
-  row.querySelector(".editBtn").style.display = "inline-block";
-  row.querySelector(".saveBtn").style.display = "none";
-  row.querySelector(".cancelBtn").style.display = "none";
-}
-
-function saveEdit(btn, id) {
-  const row = btn.closest("tr");
-  const inputs = row.querySelectorAll(".edit");
-  const updated = {
-    item: inputs[0].value.trim(),
-    qty: inputs[1].value.trim(),
-    unit: inputs[2].value.trim(),
-    calories: inputs[3].value.trim(),
-    protein: inputs[4].value.trim(),
-    uid: currentUID
-  };
-  db.collection("ingredients").doc(id).update(updated).then(loadIngredients);
-}
-
-
-function renderTable(ingredients) {
-  const tbody = document.getElementById("ingredientTable");
-  tbody.innerHTML = "";
-  if (ingredients.length === 0) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 6;
-    td.textContent = "No ingredients in lookup table.";
-    td.style.fontStyle = "italic";
-    td.style.color = "#666";
-    td.style.textAlign = "center";
-    tr.appendChild(td);
-    tbody.appendChild(tr);
-    return;
-  }
-
-  ingredients.forEach(doc => {
-    const ing = doc.data();
-    const id = doc.id;
-    const tr = document.createElement("tr");
-
-    ['item','qty','unit','calories','protein'].forEach(key => {
-      const td = document.createElement("td");
-      const span = document.createElement("span");
-      span.className = "view";
-      span.textContent = ing[key];
-      const input = document.createElement("input");
-      input.className = "edit";
-      input.value = ing[key];
-      input.style.display = "none";
-      if (key === "qty" || key === "calories" || key === "protein") input.type = "number";
-      else input.type = "text";
-      td.appendChild(span);
-      td.appendChild(input);
-      tr.appendChild(td);
-    });
-
-    const actionTd = document.createElement("td");
-    actionTd.innerHTML = `
-      <button class="btn editBtn" onclick="enableEdit(this)">Edit</button>
-      <button class="btn btn-add saveBtn" style="display:none;" onclick="saveEdit(this, '${id}')">Save</button>
-      <button class="btn btn-delete cancelBtn" style="display:none;" onclick="cancelEdit(this)">Cancel</button>
-      <button class="btn btn-delete" onclick="deleteIngredient('${id}')">Delete</button>
-    `;
-    tr.appendChild(actionTd);
-    tbody.appendChild(tr);
-  });
-}
-
-</script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js">
-function handleCSVUpload() {
-  const fileInput = document.getElementById('csvInput');
-  const file = fileInput.files[0];
-  if (!file) return alert("Please select a CSV file.");
-
-  const reader = new FileReader();
-  reader.onload = function (e) {
-    const text = e.target.result;
-    const lines = text.trim().split('\n');
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-
-    const required = ['item', 'qty', 'unit', 'calories', 'protein'];
-    if (!required.every(h => headers.includes(h))) {
-      return alert("CSV must include: item, qty, unit, calories, protein");
-    }
-
-    const headerIndex = Object.fromEntries(headers.map((h, i) => [h, i]));
-
-    const toAdd = lines.slice(1).map(line => {
-      const cols = line.split(',');
-      return {
-        uid: currentUID,
-        item: cols[headerIndex['item']].trim(),
-        qty: cols[headerIndex['qty']].trim(),
-        unit: cols[headerIndex['unit']].trim(),
-        calories: cols[headerIndex['calories']].trim(),
-        protein: cols[headerIndex['protein']].trim(),
-      };
-    });
-
-    const batch = db.batch();
-    const ref = db.collection("ingredients");
-    toAdd.forEach(entry => {
-      const docRef = ref.doc();
-      batch.set(docRef, entry);
-    });
-
-    batch.commit().then(() => {
-      alert("CSV uploaded successfully.");
-      loadIngredients();
-    }).catch(err => {
-      alert("Upload failed: " + err.message);
-    });
-  };
-  reader.readAsText(file);
-}
-
-
-function exportToCSV() {
-  db.collection("ingredients").where("uid", "==", currentUID).get().then(snapshot => {
-    if (snapshot.empty) {
-      alert("No ingredients to export.");
-      return;
-    }
-    const rows = [["item", "qty", "unit", "calories", "protein"]];
-    snapshot.forEach(doc => {
-      const d = doc.data();
-      rows.push([d.item, d.qty, d.unit, d.calories, d.protein]);
-    });
-    const csvContent = rows.map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "ingredients.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  });
-}
-
-
-function enableEdit(btn) {
-  const row = btn.closest("tr");
-  row.querySelectorAll(".view").forEach(el => el.style.display = "none");
-  row.querySelectorAll(".edit").forEach(el => el.style.display = "inline-block");
-  row.querySelector(".editBtn").style.display = "none";
-  row.querySelector(".saveBtn").style.display = "inline-block";
-  row.querySelector(".cancelBtn").style.display = "inline-block";
-}
-
-function cancelEdit(btn) {
-  const row = btn.closest("tr");
-  row.querySelectorAll(".view").forEach(el => el.style.display = "inline-block");
-  row.querySelectorAll(".edit").forEach(el => el.style.display = "none");
-  row.querySelector(".editBtn").style.display = "inline-block";
-  row.querySelector(".saveBtn").style.display = "none";
-  row.querySelector(".cancelBtn").style.display = "none";
-}
-
-function saveEdit(btn, id) {
-  const row = btn.closest("tr");
-  const inputs = row.querySelectorAll(".edit");
-  const updated = {
-    item: inputs[0].value.trim(),
-    qty: inputs[1].value.trim(),
-    unit: inputs[2].value.trim(),
-    calories: inputs[3].value.trim(),
-    protein: inputs[4].value.trim(),
-    uid: currentUID
-  };
-  db.collection("ingredients").doc(id).update(updated).then(loadIngredients);
-}
-
-
-function renderTable(ingredients) {
-  const tbody = document.getElementById("ingredientTable");
-  tbody.innerHTML = "";
-  if (ingredients.length === 0) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 6;
-    td.textContent = "No ingredients in lookup table.";
-    td.style.fontStyle = "italic";
-    td.style.color = "#666";
-    td.style.textAlign = "center";
-    tr.appendChild(td);
-    tbody.appendChild(tr);
-    return;
-  }
-
-  ingredients.forEach(doc => {
-    const ing = doc.data();
-    const id = doc.id;
-    const tr = document.createElement("tr");
-
-    ['item','qty','unit','calories','protein'].forEach(key => {
-      const td = document.createElement("td");
-      const span = document.createElement("span");
-      span.className = "view";
-      span.textContent = ing[key];
-      const input = document.createElement("input");
-      input.className = "edit";
-      input.value = ing[key];
-      input.style.display = "none";
-      if (key === "qty" || key === "calories" || key === "protein") input.type = "number";
-      else input.type = "text";
-      td.appendChild(span);
-      td.appendChild(input);
-      tr.appendChild(td);
-    });
-
-    const actionTd = document.createElement("td");
-    actionTd.innerHTML = `
-      <button class="btn editBtn" onclick="enableEdit(this)">Edit</button>
-      <button class="btn btn-add saveBtn" style="display:none;" onclick="saveEdit(this, '${id}')">Save</button>
-      <button class="btn btn-delete cancelBtn" style="display:none;" onclick="cancelEdit(this)">Cancel</button>
-      <button class="btn btn-delete" onclick="deleteIngredient('${id}')">Delete</button>
-    `;
-    tr.appendChild(actionTd);
-    tbody.appendChild(tr);
-  });
-}
-
-</script>
 </head>
 <body>
 
-  <a class="btn" href="dashboard.html">⬅ Go to Dashboard</a>
-  <h2>Ingredient Lookup Table</h2>
+<a class="btn" href="dashboard.html">⬅ Go to Dashboard</a>
+<h2>Ingredient Lookup Table</h2>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Item</th>
-        <th>Per Unit Qty</th>
-        <th>Unit</th>
-        <th>Calories</th>
-        <th>Protein</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody id="ingredientTable">
-      <!-- Populated dynamically -->
-    </tbody>
-  </table>
+<table>
+  <thead>
+    <tr>
+      <th>Item</th>
+      <th>Per Unit Qty</th>
+      <th>Unit</th>
+      <th>Calories</th>
+      <th>Protein</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody id="ingredientTable"></tbody>
+</table>
 
-  <button class="btn btn-add" onclick="document.getElementById('ingredientDialog').showModal()">+ Add New Ingredient</button>
-
-  
-  
-<hr>
-<h3>Import / Export</h3>
-<div style="margin-top: 10px;">
-  <input type="file" id="csvInput" accept=".csv" />
-  <button class="btn btn-add" onclick="handleCSVUpload()">Import CSV</button>
-  <button class="btn" onclick="exportToCSV()">Export CSV</button>
-</div>
+<button class="btn btn-add" onclick="document.getElementById('ingredientDialog').showModal()">+ Add New Ingredient</button>
 
 <dialog id="ingredientDialog">
-    <form method="dialog" onsubmit="saveIngredient(event)">
-      <h3>Add Ingredient</h3>
-      <input type="text" id="itemInput" placeholder="Item name" required />
-      <input type="number" step="0.01" id="qtyInput" placeholder="Per Unit Qty" required />
-      <input type="text" id="unitInput" placeholder="Unit (e.g. gm, ml)" required />
-      <input type="number" step="0.01" id="caloriesInput" placeholder="Calories" required />
-      <input type="number" step="0.01" id="proteinInput" placeholder="Protein" required />
-      <div>
-        <button class="btn" type="submit">Save</button>
-        <button class="btn btn-delete" onclick="document.getElementById('ingredientDialog').close()">Cancel</button>
-      </div>
-    </form>
-  </dialog>
+  <form method="dialog" onsubmit="saveIngredient(event)">
+    <h3>Add Ingredient</h3>
+    <input type="text" id="itemInput" placeholder="Item name" required />
+    <input type="number" step="0.01" id="qtyInput" placeholder="Per Unit Qty" required />
+    <input type="text" id="unitInput" placeholder="Unit (e.g. gm, ml)" required />
+    <input type="number" step="0.01" id="caloriesInput" placeholder="Calories" required />
+    <input type="number" step="0.01" id="proteinInput" placeholder="Protein" required />
+    <div>
+      <button class="btn" type="submit">Save</button>
+      <button class="btn btn-delete" onclick="document.getElementById('ingredientDialog').close()">Cancel</button>
+    </div>
+  </form>
+</dialog>
 
-  <script>
-    
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+  import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+  import {
+    getFirestore, collection, query, where, getDocs, addDoc, deleteDoc, doc
+  } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    let currentUID = null;
+  const firebaseConfig = {
+  apiKey: "AIzaSyBpmurxYdJpAzOzUVALHqTojYR7ULiIPEM",
+  authDomain: "nutritrack-lite-795b2.firebaseapp.com",
+  projectId: "nutritrack-lite-795b2",
+  storageBucket: "nutritrack-lite-795b2.firebasestorage.app",
+  messagingSenderId: "1089632956766",
+  appId: "1:1089632956766:web:be972b8f74b079e6609fcf",
+  measurementId: "G-P5R1VXPY3E"
+};
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
 
-    auth.onAuthStateChanged(user => {
-      if (!user) return window.location.href = "index.html";
+  let currentUID = null;
+
+  onAuthStateChanged(auth, user => {
+    if (!user) {
+      window.location.href = "index.html";
+    } else {
       currentUID = user.uid;
       loadIngredients();
-    });
-
-    function renderTable(ingredients) {
-      const tbody = document.getElementById("ingredientTable");
-      tbody.innerHTML = "";
-      if (ingredients.length === 0) {
-        const tr = document.createElement("tr");
-        const td = document.createElement("td");
-        td.colSpan = 6;
-        td.textContent = "No ingredients in lookup table.";
-        td.style.fontStyle = "italic";
-        td.style.color = "#666";
-        td.style.textAlign = "center";
-        tr.appendChild(td);
-        tbody.appendChild(tr);
-        return;
-      }
-
-      ingredients.forEach(doc => {
-        const ing = doc.data();
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${ing.item}</td>
-          <td>${ing.qty}</td>
-          <td>${ing.unit}</td>
-          <td>${ing.calories}</td>
-          <td>${ing.protein}</td>
-          <td><button class="btn btn-delete" onclick="deleteIngredient('${doc.id}')">Delete</button></td>
-        `;
-        tbody.appendChild(tr);
-      });
     }
+  });
 
-    function loadIngredients() {
-      db.collection("ingredients").where("uid", "==", currentUID).get()
-        .then(snapshot => renderTable(snapshot.docs));
-    }
-
-    function saveIngredient(e) {
-      e.preventDefault();
-      const item = document.getElementById("itemInput").value.trim();
-      const qty = document.getElementById("qtyInput").value.trim();
-      const unit = document.getElementById("unitInput").value.trim();
-      const calories = document.getElementById("caloriesInput").value.trim();
-      const protein = document.getElementById("proteinInput").value.trim();
-
-      if (!item || !qty || !unit || !calories || !protein) return;
-
-      db.collection("ingredients").add({
-        uid: currentUID,
-        item, qty, unit, calories, protein
-      }).then(() => {
-        document.getElementById("ingredientDialog").close();
-        loadIngredients();
-      });
-    }
-
-    function deleteIngredient(id) {
-      if (confirm("Delete this ingredient?")) {
-        db.collection("ingredients").doc(id).delete().then(loadIngredients);
-      }
-    }
-  
-function handleCSVUpload() {
-  const fileInput = document.getElementById('csvInput');
-  const file = fileInput.files[0];
-  if (!file) return alert("Please select a CSV file.");
-
-  const reader = new FileReader();
-  reader.onload = function (e) {
-    const text = e.target.result;
-    const lines = text.trim().split('\n');
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-
-    const required = ['item', 'qty', 'unit', 'calories', 'protein'];
-    if (!required.every(h => headers.includes(h))) {
-      return alert("CSV must include: item, qty, unit, calories, protein");
-    }
-
-    const headerIndex = Object.fromEntries(headers.map((h, i) => [h, i]));
-
-    const toAdd = lines.slice(1).map(line => {
-      const cols = line.split(',');
-      return {
-        uid: currentUID,
-        item: cols[headerIndex['item']].trim(),
-        qty: cols[headerIndex['qty']].trim(),
-        unit: cols[headerIndex['unit']].trim(),
-        calories: cols[headerIndex['calories']].trim(),
-        protein: cols[headerIndex['protein']].trim(),
-      };
-    });
-
-    const batch = db.batch();
-    const ref = db.collection("ingredients");
-    toAdd.forEach(entry => {
-      const docRef = ref.doc();
-      batch.set(docRef, entry);
-    });
-
-    batch.commit().then(() => {
-      alert("CSV uploaded successfully.");
-      loadIngredients();
-    }).catch(err => {
-      alert("Upload failed: " + err.message);
-    });
-  };
-  reader.readAsText(file);
-}
-
-
-function exportToCSV() {
-  db.collection("ingredients").where("uid", "==", currentUID).get().then(snapshot => {
+  async function loadIngredients() {
+    const q = query(collection(db, "ingredients"), where("uid", "==", currentUID));
+    const snapshot = await getDocs(q);
+    const tbody = document.getElementById("ingredientTable");
+    tbody.innerHTML = "";
     if (snapshot.empty) {
-      alert("No ingredients to export.");
+      tbody.innerHTML = `<tr><td colspan='6' style='color:#666;font-style:italic'>No ingredients found.</td></tr>`;
       return;
     }
-    const rows = [["item", "qty", "unit", "calories", "protein"]];
-    snapshot.forEach(doc => {
-      const d = doc.data();
-      rows.push([d.item, d.qty, d.unit, d.calories, d.protein]);
+    snapshot.forEach(docSnap => {
+      const ing = docSnap.data();
+      const id = docSnap.id;
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${ing.item}</td>
+        <td>${ing.qty}</td>
+        <td>${ing.unit}</td>
+        <td>${ing.calories}</td>
+        <td>${ing.protein}</td>
+        <td><button class='btn btn-delete' onclick='deleteIngredient("${id}")'>Delete</button></td>
+`;
+      tbody.appendChild(row);
     });
-    const csvContent = rows.map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "ingredients.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  });
-}
-
-
-function enableEdit(btn) {
-  const row = btn.closest("tr");
-  row.querySelectorAll(".view").forEach(el => el.style.display = "none");
-  row.querySelectorAll(".edit").forEach(el => el.style.display = "inline-block");
-  row.querySelector(".editBtn").style.display = "none";
-  row.querySelector(".saveBtn").style.display = "inline-block";
-  row.querySelector(".cancelBtn").style.display = "inline-block";
-}
-
-function cancelEdit(btn) {
-  const row = btn.closest("tr");
-  row.querySelectorAll(".view").forEach(el => el.style.display = "inline-block");
-  row.querySelectorAll(".edit").forEach(el => el.style.display = "none");
-  row.querySelector(".editBtn").style.display = "inline-block";
-  row.querySelector(".saveBtn").style.display = "none";
-  row.querySelector(".cancelBtn").style.display = "none";
-}
-
-function saveEdit(btn, id) {
-  const row = btn.closest("tr");
-  const inputs = row.querySelectorAll(".edit");
-  const updated = {
-    item: inputs[0].value.trim(),
-    qty: inputs[1].value.trim(),
-    unit: inputs[2].value.trim(),
-    calories: inputs[3].value.trim(),
-    protein: inputs[4].value.trim(),
-    uid: currentUID
-  };
-  db.collection("ingredients").doc(id).update(updated).then(loadIngredients);
-}
-
-
-function renderTable(ingredients) {
-  const tbody = document.getElementById("ingredientTable");
-  tbody.innerHTML = "";
-  if (ingredients.length === 0) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 6;
-    td.textContent = "No ingredients in lookup table.";
-    td.style.fontStyle = "italic";
-    td.style.color = "#666";
-    td.style.textAlign = "center";
-    tr.appendChild(td);
-    tbody.appendChild(tr);
-    return;
   }
 
-  ingredients.forEach(doc => {
-    const ing = doc.data();
-    const id = doc.id;
-    const tr = document.createElement("tr");
+  window.saveIngredient = async function(e) {
+    e.preventDefault();
+    const item = document.getElementById("itemInput").value.trim();
+    const qty = document.getElementById("qtyInput").value.trim();
+    const unit = document.getElementById("unitInput").value.trim();
+    const calories = document.getElementById("caloriesInput").value.trim();
+    const protein = document.getElementById("proteinInput").value.trim();
 
-    ['item','qty','unit','calories','protein'].forEach(key => {
-      const td = document.createElement("td");
-      const span = document.createElement("span");
-      span.className = "view";
-      span.textContent = ing[key];
-      const input = document.createElement("input");
-      input.className = "edit";
-      input.value = ing[key];
-      input.style.display = "none";
-      if (key === "qty" || key === "calories" || key === "protein") input.type = "number";
-      else input.type = "text";
-      td.appendChild(span);
-      td.appendChild(input);
-      tr.appendChild(td);
+    if (!item || !qty || !unit || !calories || !protein) return;
+
+    await addDoc(collection(db, "ingredients"), {
+      uid: currentUID,
+      item, qty, unit, calories, protein
     });
+    document.getElementById("ingredientDialog").close();
+    loadIngredients();
+  }
 
-    const actionTd = document.createElement("td");
-    actionTd.innerHTML = `
-      <button class="btn editBtn" onclick="enableEdit(this)">Edit</button>
-      <button class="btn btn-add saveBtn" style="display:none;" onclick="saveEdit(this, '${id}')">Save</button>
-      <button class="btn btn-delete cancelBtn" style="display:none;" onclick="cancelEdit(this)">Cancel</button>
-      <button class="btn btn-delete" onclick="deleteIngredient('${id}')">Delete</button>
-    `;
-    tr.appendChild(actionTd);
-    tbody.appendChild(tr);
-  });
-}
-
+  window.deleteIngredient = async function(id) {
+    await deleteDoc(doc(db, "ingredients", id));
+    loadIngredients();
+  }
 </script>
-
-
-  <script type="module">
-    import { auth } from './firebase-config.js';
-    import { getFirestore, collection, query, where, getDocs, addDoc, deleteDoc, doc, onAuthStateChanged } 
-    from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
-
-    import { app } from './firebase-config.js';
-    const db = getFirestore(app);
-
-    let currentUID = null;
-
-    onAuthStateChanged(auth, user => {
-      if (!user) return window.location.href = "index.html";
-      currentUID = user.uid;
-      loadIngredients();
-    });
-
-    async function loadIngredients() {
-      const q = query(collection(db, "ingredients"), where("uid", "==", currentUID));
-      const snapshot = await getDocs(q);
-      renderTable(snapshot.docs);
-    }
-
-    window.saveIngredient = async function(e) {
-      e.preventDefault();
-      const item = document.getElementById("itemInput").value.trim();
-      const qty = document.getElementById("qtyInput").value.trim();
-      const unit = document.getElementById("unitInput").value.trim();
-      const calories = document.getElementById("caloriesInput").value.trim();
-      const protein = document.getElementById("proteinInput").value.trim();
-
-      if (!item || !qty || !unit || !calories || !protein) return;
-
-      await addDoc(collection(db, "ingredients"), {
-        uid: currentUID,
-        item, qty, unit, calories, protein
-      });
-
-      document.getElementById("ingredientDialog").close();
-      loadIngredients();
-    }
-
-    window.deleteIngredient = async function(id) {
-      if (confirm("Delete this ingredient?")) {
-        await deleteDoc(doc(db, "ingredients", id));
-        loadIngredients();
-      }
-    }
-
-    function renderTable(ingredients) {
-      const tbody = document.getElementById("ingredientTable");
-      tbody.innerHTML = "";
-      if (ingredients.length === 0) {
-        const tr = document.createElement("tr");
-        const td = document.createElement("td");
-        td.colSpan = 6;
-        td.textContent = "No ingredients in lookup table.";
-        td.style.fontStyle = "italic";
-        td.style.color = "#666";
-        td.style.textAlign = "center";
-        tr.appendChild(td);
-        tbody.appendChild(tr);
-        return;
-      }
-
-      ingredients.forEach(doc => {
-        const ing = doc.data();
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${ing.item}</td>
-          <td>${ing.qty}</td>
-          <td>${ing.unit}</td>
-          <td>${ing.calories}</td>
-          <td>${ing.protein}</td>
-          <td><button class="btn btn-delete" onclick="deleteIngredient('${doc.id}')">Delete</button></td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-  </script>
 
 </body>
 </html>

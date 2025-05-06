@@ -74,10 +74,20 @@
   async function loadIngredients() {
     document.getElementById("loading").style.display = "block";
     try {
+        
+    document.getElementById("loading").style.display = "block";
+    try {
       const q = query(collection(db, "ingredients"), where("uid", "==", currentUID));
       const snapshot = await getDocs(q);
       renderTable(snapshot.docs);
+    
     } catch (e) {
+        console.error("Error loading ingredients:", e);
+        renderTable([]); // Show empty table on error
+    } finally {
+        document.getElementById("loading").style.display = "none";
+    }
+} catch (e) {
       console.error("Failed to load ingredients:", e);
       const tbody = document.getElementById("ingredientTable");
       tbody.innerHTML = "<tr><td colspan='6' style='color:red;'>Failed to load ingredients.</td></tr>";

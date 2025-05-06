@@ -1,7 +1,7 @@
-
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
   <title>Ingredients</title>
   <link rel="stylesheet" href="style.css">
   <style>
@@ -12,13 +12,15 @@
     .btn { padding: 5px 10px; margin: 5px; border-radius: 4px; cursor: pointer; }
     .btn-add { background-color: #007bff; color: white; }
     .btn-delete { background-color: #dc3545; color: white; }
+    .loading { font-style: italic; color: #666; }
+    span.edit { display: none; }
   </style>
 </head>
 <body>
 
 <a class="btn" href="dashboard.html">⬅ Go to Dashboard</a>
-<h2>Ingredient Lookup Table</h2>
-
+<h2>Ingredient Lookup</h2>
+<div id="loading" class="loading" style="display:none;">Loading...</div>
 <table>
   <thead>
     <tr>
@@ -32,7 +34,6 @@
   </thead>
   <tbody id="ingredientTable"></tbody>
 </table>
-
 <button class="btn btn-add" onclick="document.getElementById('ingredientDialog').showModal()">+ Add New Ingredient</button>
 
 <dialog id="ingredientDialog">
@@ -54,22 +55,11 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
   import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
   import {
-    getFirestore, collection, query, where, getDocs, addDoc, deleteDoc, doc
+    getFirestore, collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc
   } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+  import { app, auth } from "./firebase-config.js";
 
-  const firebaseConfig = {
-  apiKey: "AIzaSyBpmurxYdJpAzOzUVALHqTojYR7ULiIPEM",
-  authDomain: "nutritrack-lite-795b2.firebaseapp.com",
-  projectId: "nutritrack-lite-795b2",
-  storageBucket: "nutritrack-lite-795b2.firebasestorage.app",
-  messagingSenderId: "1089632956766",
-  appId: "1:1089632956766:web:be972b8f74b079e6609fcf",
-  measurementId: "G-P5R1VXPY3E"
-};
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
   const db = getFirestore(app);
-
   let currentUID = null;
 
   onAuthStateChanged(auth, user => {
@@ -82,108 +72,91 @@
   });
 
   async function loadIngredients() {
-  try {
-    const q = query(collection(db, "ingredients"), where("uid", "==", currentUID));
-    const snapshot = await getDocs(q);
+    document.getElementById("loading").style.display = "block";
+    try {
+      const q = query(collection(db, "ingredients"), where("uid", "==", currentUID));
+      const snapshot = await getDocs(q);
+      renderTable(snapshot.docs);
+    } catch (e) {
+      console.error("Failed to load ingredients:", e);
+      const tbody = document.getElementById("ingredientTable");
+      tbody.innerHTML = "<tr><td colspan='6' style='color:red;'>Failed to load ingredients.</td></tr>";
+    } finally {
+      document.getElementById("loading").style.display = "none";
+    }
+  }
+
+  function renderTable(docs) {
     const tbody = document.getElementById("ingredientTable");
     tbody.innerHTML = "";
-    if (snapshot.empty) {
-      tbody.innerHTML = `<tr><td colspan='6' style='color:#666;font-style:italic'>No ingredients found.</td></tr>`;
+    if (docs.length === 0) {
+      tbody.innerHTML = "<tr><td colspan='6' style='font-style:italic;color:#666;'>No ingredients found.</td></tr>";
       return;
-    
-  } catch (e) {
-    console.error("Failed to load ingredients:", e);
-    const tbody = document.getElementById("ingredientTable");
-    tbody.innerHTML = `<tr><td colspan='6' style='color:red;font-style:italic'>Failed to load ingredients. Please try again.</td></tr>`;
-  }
-}
-    snapshot.forEach(docSnap => {
+    }
+    docs.forEach(docSnap => {
       const ing = docSnap.data();
       const id = docSnap.id;
-      const row = document.createElement("tr");
-      row.innerHTML = `
-<td><span class="view">${ing.item}</span><input class="edit" value="${ing.item}" /></td>
-<td><span class="view">${ing.qty}</span><input class="edit" value="${ing.qty}" /></td>
-<td><span class="view">${ing.unit}</span><input class="edit" value="${ing.unit}" /></td>
-<td><span class="view">${ing.calories}</span><input class="edit" type="number" step="0.01" value="${ing.calories}" /></td>
-<td><span class="view">${ing.protein}</span><input class="edit" type="number" step="0.01" value="${ing.protein}" /></td>
-<td>
-  <button class="btn editBtn" onclick="editRow(this)">Edit</button>
-  <button class="btn saveBtn" style="display:none" onclick="saveRow('${id}', this)">Save</button>
-  <button class="btn cancelBtn" style="display:none" onclick="cancelRow(this)">Cancel</button>
-  <button class="btn btn-delete" onclick="deleteIngredient('${id}')">Delete</button>
-</td>
-`;
-      tbody.appendChild(row);
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><span class="view">${ing.item}</span><input class="edit" value="${ing.item}" /></td>
+        <td><span class="view">${ing.qty}</span><input class="edit" value="${ing.qty}" /></td>
+        <td><span class="view">${ing.unit}</span><input class="edit" value="${ing.unit}" /></td>
+        <td><span class="view">${ing.calories}</span><input class="edit" type="number" step="0.01" value="${ing.calories}" /></td>
+        <td><span class="view">${ing.protein}</span><input class="edit" type="number" step="0.01" value="${ing.protein}" /></td>
+        <td>
+          <button class="btn editBtn" onclick="editRow(this)">Edit</button>
+          <button class="btn saveBtn" style="display:none;" onclick="saveRow('${id}', this)">Save</button>
+          <button class="btn cancelBtn" style="display:none;" onclick="cancelRow(this)">Cancel</button>
+          <button class="btn btn-delete" onclick="deleteIngredient('${id}')">Delete</button>
+        </td>`;
+      tbody.appendChild(tr);
     });
   }
 
-  
-window.saveIngredient = async function(e) {
-  e.preventDefault();
+  async function saveIngredient(e) {
+    e.preventDefault();
+    const item = document.getElementById("itemInput").value.trim();
+    const qty = document.getElementById("qtyInput").value.trim();
+    const unit = document.getElementById("unitInput").value.trim();
+    const calories = document.getElementById("caloriesInput").value.trim();
+    const protein = document.getElementById("proteinInput").value.trim();
 
-  const item = document.getElementById("itemInput").value.trim();
-  const qty = document.getElementById("qtyInput").value.trim();
-  const unit = document.getElementById("unitInput").value.trim();
-  const calories = document.getElementById("caloriesInput").value.trim();
-  const protein = document.getElementById("proteinInput").value.trim();
+    if (!item || !qty || !unit || !calories || !protein) {
+      alert("All fields are required.");
+      return;
+    }
 
-  if (!item || !qty || !unit || !calories || !protein) {
-    alert("All fields are required.");
-    return;
+    try {
+      await addDoc(collection(db, "ingredients"), { uid: currentUID, item, qty, unit, calories, protein });
+      document.getElementById("ingredientDialog").close();
+      const msg = document.createElement("div");
+      msg.textContent = "✅ Ingredient added!";
+      msg.style.cssText = "position:fixed;top:10px;right:10px;background:#d4edda;color:#155724;padding:8px;border-radius:4px;";
+      document.body.appendChild(msg);
+      setTimeout(() => msg.remove(), 2000);
+      await loadIngredients();
+    } catch (e) {
+      console.error("Error adding ingredient:", e);
+      alert("Failed to add ingredient.");
+    }
   }
 
-  try {
-    await addDoc(collection(db, "ingredients"), {
-      uid: currentUID,
-      uid: currentUID,
-      item, qty, unit, calories, protein
-    });
-
-    document.getElementById("ingredientDialog").close();
-
-    const successMessage = document.createElement('div');
-    successMessage.textContent = "✅ Ingredient added!";
-    successMessage.style.position = "fixed";
-    successMessage.style.top = "20px";
-    successMessage.style.right = "20px";
-    successMessage.style.background = "#d4edda";
-    successMessage.style.color = "#155724";
-    successMessage.style.padding = "10px 20px";
-    successMessage.style.borderRadius = "5px";
-    successMessage.style.boxShadow = "0 2px 5px rgba(0,0,0,0.2)";
-    successMessage.style.zIndex = 1000;
-    document.body.appendChild(successMessage);
-    setTimeout(() => successMessage.remove(), 2000);
-
-    await loadIngredients();
-  } catch (error) {
-    alert("Error saving ingredient: " + error.message);
-  }
-};
-
-
-    await updateDoc(doc(db, "ingredients", id), updated);
-    await loadIngredients();
+  function editRow(btn) {
+    const row = btn.closest("tr");
+    row.querySelectorAll(".view").forEach(el => el.style.display = "none");
+    row.querySelectorAll(".edit").forEach(el => el.style.display = "inline");
+    row.querySelector(".editBtn").style.display = "none";
+    row.querySelector(".saveBtn").style.display = "inline";
+    row.querySelector(".cancelBtn").style.display = "inline";
   }
 
+  function cancelRow(btn) {
+    loadIngredients();
+  }
 
-  window.editRow = function(btn) {
-    const row = btn.closest('tr');
-    row.querySelectorAll('.view').forEach(el => el.style.display = 'none');
-    row.querySelectorAll('.edit').forEach(el => el.style.display = 'inline');
-    row.querySelector('.editBtn').style.display = 'none';
-    row.querySelector('.saveBtn').style.display = 'inline';
-    row.querySelector('.cancelBtn').style.display = 'inline';
-  };
-
-  window.cancelRow = function(btn) {
-    loadIngredients(); // Reload to reset all edits
-  };
-
-  window.saveRow = async function(id, btn) {
-    const row = btn.closest('tr');
-    const inputs = row.querySelectorAll('.edit');
+  async function saveRow(id, btn) {
+    const row = btn.closest("tr");
+    const inputs = row.querySelectorAll(".edit");
     const updated = {
       item: inputs[0].value.trim(),
       qty: inputs[1].value.trim(),
@@ -191,10 +164,25 @@ window.saveIngredient = async function(e) {
       calories: inputs[3].value.trim(),
       protein: inputs[4].value.trim()
     };
-    await updateDoc(doc(db, "ingredients", id), updated);
-    await loadIngredients();
-  };
+    try {
+      await updateDoc(doc(db, "ingredients", id), updated);
+      await loadIngredients();
+    } catch (e) {
+      console.error("Error updating ingredient:", e);
+      alert("Failed to update.");
+    }
+  }
 
+  async function deleteIngredient(id) {
+    if (!confirm("Delete this ingredient?")) return;
+    try {
+      await deleteDoc(doc(db, "ingredients", id));
+      await loadIngredients();
+    } catch (e) {
+      console.error("Error deleting ingredient:", e);
+      alert("Failed to delete.");
+    }
+  }
 </script>
 
 </body>

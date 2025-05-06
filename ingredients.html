@@ -82,6 +82,7 @@
   });
 
   async function loadIngredients() {
+  try {
     const q = query(collection(db, "ingredients"), where("uid", "==", currentUID));
     const snapshot = await getDocs(q);
     const tbody = document.getElementById("ingredientTable");
@@ -89,7 +90,13 @@
     if (snapshot.empty) {
       tbody.innerHTML = `<tr><td colspan='6' style='color:#666;font-style:italic'>No ingredients found.</td></tr>`;
       return;
-    }
+    
+  } catch (e) {
+    console.error("Failed to load ingredients:", e);
+    const tbody = document.getElementById("ingredientTable");
+    tbody.innerHTML = `<tr><td colspan='6' style='color:red;font-style:italic'>Failed to load ingredients. Please try again.</td></tr>`;
+  }
+}
     snapshot.forEach(docSnap => {
       const ing = docSnap.data();
       const id = docSnap.id;
@@ -128,6 +135,7 @@ window.saveIngredient = async function(e) {
 
   try {
     await addDoc(collection(db, "ingredients"), {
+      uid: currentUID,
       uid: currentUID,
       item, qty, unit, calories, protein
     });
